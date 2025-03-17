@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # 開発環境サービス
+  app-dev:
+    build:
+      context: .
+      target: development
+    container_name: wasm-compiler-dev
+    volumes:
+      - ./App:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true # Dockerでのファイル変更検知を改善
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # 本番ビルドサービス
+  app-build:
+    build:
+      context: .
+      target: build
+    container_name: wasm-compiler-build
+    volumes:
+      - build-output:/app/build
+
+  # Nginxサービス（本番環境）
+  nginx:
+    image: nginx:stable-alpine
+    container_name: wasm-compiler-nginx
+    depends_on:
+      - app-build
+    ports:
+      - "80:80"
+    volumes:
+      - build-output:/usr/share/nginx/html
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  build-output:
+  node_modules:
+
+networks:
+  default:
+    name: wasm-compiler-network
+    driver: bridge
